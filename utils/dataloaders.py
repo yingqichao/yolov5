@@ -169,6 +169,7 @@ def create_dataloader(
     prefix="",
     shuffle=False,
     seed=0,
+    coco_like_dict=None,
 ):
     if rect and shuffle:
         LOGGER.warning("WARNING ⚠️ --rect is incompatible with DataLoader shuffle, setting shuffle=False")
@@ -188,6 +189,7 @@ def create_dataloader(
             image_weights=image_weights,
             prefix=prefix,
             rank=rank,
+            coco_like_dict=coco_like_dict,
         )
 
     batch_size = min(batch_size, len(dataset))
@@ -489,7 +491,7 @@ class LoadStreams:
 
 def img2label_paths(img_paths):
     # Define label paths as a function of image paths
-    sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
+    sa, sb = f"{os.sep}frames{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
     return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + ".txt" for x in img_paths]
 
 def img2label_paths_customized(img_paths, sqlite_dict: dict):
@@ -522,7 +524,10 @@ class LoadImagesAndLabels(Dataset):
         prefix="",
         rank=-1,
         seed=0,
+        coco_like_dict=None,
     ):
+        ## first check if we are using customized dataset
+        self.use_coco = coco_like_dict is None
         self.img_size = img_size
         self.augment = augment
         self.hyp = hyp
@@ -556,14 +561,15 @@ class LoadImagesAndLabels(Dataset):
             raise Exception(f"{prefix}Error loading data from {path}: {e}\n{HELP_URL}") from e
 
         # Check cache
-        self.label_files = img2label_paths(self.im_files)  # labels
-        cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix(".cache")
-        try:
-            cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
-            assert cache["version"] == self.cache_version  # matches current version
-            assert cache["hash"] == get_hash(self.label_files + self.im_files)  # identical hash
-        except Exception:
-            cache, exists = self.cache_labels(cache_path, prefix), False  # run cache ops
+        if self.use_coco:
+            self.label_files = img2label_paths(self.im_files)  # labels
+            cache_path = (p if p.is_file() else Path(self.label_files[0]).parent).with_suffix(".cache")
+            try:
+                cache, exists = np.load(cache_path, allow_pickle=True).item(), True  # load dict
+                assert cache["version"] == self.cache_version  # matches current version
+                assert cache["hash"] == get_hash(self.label_files + self.im_files)  # identical hash
+            except Exception:
+                cache, exists = self.cache_labels(cache_path, prefix), False  # run cache ops
 
         # Display cache
         nf, nm, ne, nc, n = cache.pop("results")  # found, missing, empty, corrupt, total
@@ -575,14 +581,29 @@ class LoadImagesAndLabels(Dataset):
         assert nf > 0 or not augment, f"{prefix}No labels found in {cache_path}, can not start training. {HELP_URL}"
 
         # Read cache
-        [cache.pop(k) for k in ("hash", "version", "msgs")]  # remove items
-        labels, shapes, self.segments = zip(*cache.values())
-        nl = len(np.concatenate(labels, 0))  # number of labels
-        assert nl > 0 or not augment, f"{prefix}All labels empty in {cache_path}, can not start training. {HELP_URL}"
-        self.labels = list(labels)
-        self.shapes = np.array(shapes)
-        self.im_files = list(cache.keys())  # update
-        self.label_files = img2label_paths(cache.keys())  # update
+        if self.use_coco:
+            [cache.pop(k) for k in ("hash", "version", "msgs")]  # remove items
+            labels, shapes, self.segments = zip(*cache.values())
+            nl = len(np.concatenate(labels, 0))  # number of labels
+            assert nl > 0 or not augment, f"{prefix}All labels empty in {cache_path}, can not start training. {HELP_URL}"
+            self.labels = list(labels)
+            self.shapes = np.array(shapes)
+            self.im_files = list(cache.keys())  # update
+            self.label_files = img2label_paths(cache.keys())  # update
+        else:
+            pass
+            # self.im_all_files = self.im_files
+            # self.im_files = []
+            # self.label_files = []
+            # for item in self.im_all_files:
+            #     sp = item.split(os.sep)
+            #     key = f"{sp[-1][:sp[-1].rfind('.')]}_{sp[-6]}"
+            #     if key in coco_like_dict:
+            #         self.im_files.append(item)
+            #         self.label_files.append(coco_like_dict[key])
+            #     else:
+            #         print(f"{item} not found in coco_like_dict and is therefore discarded.")
+
 
         # Filter images
         if min_items:
@@ -595,7 +616,7 @@ class LoadImagesAndLabels(Dataset):
             self.shapes = self.shapes[include]  # wh
 
         # Create indices
-        n = len(self.shapes)  # number of images
+        n = len(self.shapes) if self.use_coco else None #len(self.im_files)  # number of images, shapes is shape of every image
         bi = np.floor(np.arange(n) / batch_size).astype(int)  # batch index
         nb = bi[-1] + 1  # number of batches
         self.batch = bi  # batch index of image
@@ -605,18 +626,18 @@ class LoadImagesAndLabels(Dataset):
             # force each rank (i.e. GPU process) to sample the same subset of data on every epoch
             self.indices = self.indices[np.random.RandomState(seed=seed).permutation(n) % WORLD_SIZE == RANK]
 
-        # Update labels
-        include_class = []  # filter labels to include only these classes (optional)
-        self.segments = list(self.segments)
-        include_class_array = np.array(include_class).reshape(1, -1)
-        for i, (label, segment) in enumerate(zip(self.labels, self.segments)):
-            if include_class:
-                j = (label[:, 0:1] == include_class_array).any(1)
-                self.labels[i] = label[j]
-                if segment:
-                    self.segments[i] = [segment[idx] for idx, elem in enumerate(j) if elem]
-            if single_cls:  # single-class training, merge all classes into 0
-                self.labels[i][:, 0] = 0
+        # # Update labels
+        # include_class = []  # filter labels to include only these classes (optional)
+        # self.segments = list(self.segments)
+        # include_class_array = np.array(include_class).reshape(1, -1)
+        # for i, (label, segment) in enumerate(zip(self.labels, self.segments)):
+        #     if include_class:
+        #         j = (label[:, 0:1] == include_class_array).any(1)
+        #         self.labels[i] = label[j]
+        #         if segment:
+        #             self.segments[i] = [segment[idx] for idx, elem in enumerate(j) if elem]
+        #     if single_cls:  # single-class training, merge all classes into 0
+        #         self.labels[i][:, 0] = 0
 
         # Rectangular Training
         if self.rect:
@@ -694,6 +715,7 @@ class LoadImagesAndLabels(Dataset):
                 total=len(self.im_files),
                 bar_format=TQDM_BAR_FORMAT,
             )
+            # number (missing, found, empty, corrupt), message, segments
             for im_file, lb, shape, segments, nm_f, nf_f, ne_f, nc_f, msg in pbar:
                 nm += nm_f
                 nf += nf_f
@@ -755,8 +777,16 @@ class LoadImagesAndLabels(Dataset):
             shapes = (h0, w0), ((h / h0, w / w0), pad)  # for COCO mAP rescaling
 
             labels = self.labels[index].copy()
-            if labels.size:  # normalized xywh to pixel xyxy format
-                labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
+            if labels.size:
+                if self.use_coco:
+                    # normalized xywh to pixel xyxy format
+                    labels[:, 1:] = xywhn2xyxy(labels[:, 1:], ratio[0] * w, ratio[1] * h, padw=pad[0], padh=pad[1])
+                else:
+                    pass
+                    # labels[:, 0] = w * labels[:, 0]
+                    # labels[:, 1] = h * labels[:, 1]
+                    # labels[:, 2] = w * labels[:, 2]
+                    # labels[:, 3] = h * labels[:, 3]
 
             if self.augment:
                 img, labels = random_perspective(

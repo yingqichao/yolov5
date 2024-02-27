@@ -1,6 +1,6 @@
-path: ../datasets/coco128 # dataset root dir
-train: images/train2017 # train images (relative to 'path') 128 images
-val: images/train2017 # val images (relative to 'path') 128 images
+path: ./2mp_4cam_data/frames/5e7aa184-18af-11ec-83ea-00044bf65f70/ # dataset root dir
+train: train/ # train images (relative to 'path') 128 images
+val:  train/ # val images (relative to 'path') 128 images
 test: # test images (optional)
 
 # Classes

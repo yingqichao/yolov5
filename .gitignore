@@ -1,7 +1,6 @@
 # Repo-specific GitIgnore ----------------------------------------------------------------------------------------------
 2mp_4cam_data/
 coco128/
-*.pickle
 *.jpg
 *.jpeg
 *.png
@@ -21,7 +20,6 @@ coco128/
 *.MOV
 *.avi
 *.data
-*.json
 *.cfg
 !setup.cfg
 !cfg/yolov3*.cfg

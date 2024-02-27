@@ -244,6 +244,10 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model).to(device)
         LOGGER.info("Using SyncBatchNorm()")
 
+    ## customized label dict generation
+    from label_generation import customized_image_and_label_generation
+    coco_like_dict = customized_image_and_label_generation('./2mp_4cam_data/frames/5e7aa184-18af-11ec-83ea-00044bf65f70/train')
+
     # Trainloader
     train_loader, dataset = create_dataloader(
         train_path,
@@ -262,6 +266,7 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         prefix=colorstr("train: "),
         shuffle=True,
         seed=opt.seed,
+        coco_like_dict=None,
     )
     labels = np.concatenate(dataset.labels, 0)
     mlc = int(labels[:, 0].max())  # max label class
