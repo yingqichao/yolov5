@@ -1,4 +1,7 @@
 # Repo-specific GitIgnore ----------------------------------------------------------------------------------------------
+2mp_4cam_data/
+coco128/
+*.pickle
 *.jpg
 *.jpeg
 *.png
@@ -255,3 +258,4 @@ com_crashlytics_export_strings.xml
 crashlytics.properties
 crashlytics-build.properties
 fabric.properties
+2mp_4cam_data/dataset.sqlite

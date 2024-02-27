@@ -175,7 +175,7 @@ def create_dataloader(
         shuffle = False
     with torch_distributed_zero_first(rank):  # init dataset *.cache only once if DDP
         dataset = LoadImagesAndLabels(
-            path,
+            path, ## note: this would require customization
             imgsz,
             batch_size,
             augment=augment,  # augmentation
@@ -491,6 +491,13 @@ def img2label_paths(img_paths):
     # Define label paths as a function of image paths
     sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
     return [sb.join(x.rsplit(sa, 1)).rsplit(".", 1)[0] + ".txt" for x in img_paths]
+
+def img2label_paths_customized(img_paths, sqlite_dict: dict):
+    # Define label paths as a function of image paths
+    # sa, sb = f"{os.sep}images{os.sep}", f"{os.sep}labels{os.sep}"  # /images/, /labels/ substrings
+    # return [x[:x.rfind('.')] + ".txt" for x in img_paths] ## not recommended
+    
+    return None
 
 
 class LoadImagesAndLabels(Dataset):
