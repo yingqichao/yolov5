@@ -245,8 +245,8 @@ def train(hyp, opt, device, callbacks):  # hyp is path/to/hyp.yaml or hyp dictio
         LOGGER.info("Using SyncBatchNorm()")
 
     ## customized label dict generation
-    from label_generation import customized_image_and_label_generation
-    coco_like_dict = customized_image_and_label_generation('./2mp_4cam_data/frames/5e7aa184-18af-11ec-83ea-00044bf65f70/train')
+    # from label_generation import customized_image_and_label_generation
+    # coco_like_dict = customized_image_and_label_generation('./2mp_4cam_data/frames/5e7aa184-18af-11ec-83ea-00044bf65f70/train')
 
     # Trainloader
     train_loader, dataset = create_dataloader(
