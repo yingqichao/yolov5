@@ -182,14 +182,14 @@ class Loggers:
                 for path in paths:
                     self.clearml.log_plot(title=path.stem, plot_path=path)
 
-    def on_train_batch_end(self, model, ni, imgs, targets, paths, vals):
+    def on_train_batch_end(self, epoch, model, ni, imgs, targets, paths, vals):
         log_dict = dict(zip(self.keys[:3], vals))
         # Callback runs on train batch end
         # ni: number integrated batches (since train start)
         if self.plots:
-            # if ni < 3:
-            f = self.save_dir / f"train_batch{ni}.jpg"  # filename
-            plot_images(imgs, targets, paths, f)
+            if ni < 3:
+                f = self.save_dir / f"train_batch_{epoch}_{ni}.jpg"  # filename
+                plot_images(imgs, targets, paths, f)
             if ni == 0 and self.tb and not self.opt.sync_bn:
                 log_tensorboard_graph(self.tb, model, imgsz=(self.opt.imgsz, self.opt.imgsz))
             if ni == 10 and (self.wandb or self.clearml):
